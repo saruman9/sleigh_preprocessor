@@ -105,7 +105,7 @@ impl<'a> SleighPreprocessor<'a> {
             // remove confirmed full-line comments
             line = FULL_LINE_COMMENT_RE.replace(&line, "").to_string();
 
-            if !line.is_empty() && line.starts_with("@") {
+            if !line.is_empty() && line.starts_with('@') {
                 // remove any comments in preprocessor
                 line = COMMENT_RE.replace(&line, "").to_string();
 
@@ -129,7 +129,10 @@ impl<'a> SleighPreprocessor<'a> {
                         // the one directive we skip printing a blank line
                         continue;
                     }
-                } else if let Some(m) = DEFINE1_RE.captures(&line).or(DEFINE2_RE.captures(&line)) {
+                } else if let Some(m) = DEFINE1_RE
+                    .captures(&line)
+                    .or_else(|| DEFINE2_RE.captures(&line))
+                {
                     if self.is_copy() {
                         // TODO Create error
                         let key = m.get(1).unwrap().as_str();
@@ -188,18 +191,16 @@ impl<'a> SleighPreprocessor<'a> {
                     self.current_position()
                 );
                 writer.push_str(&format!("# {}\n", original_line));
+            } else if self.is_copy() {
+                trace!("PRINT {}: printing text", self.current_position());
+                writer.push_str(&self.handle_variables(&line, self.compatible));
+                writer.push('\n');
             } else {
-                if self.is_copy() {
-                    trace!("PRINT {}: printing text", self.current_position());
-                    writer.push_str(&self.handle_variables(&line, self.compatible));
-                    writer.push('\n');
-                } else {
-                    trace!(
-                        "PRINT {}: replacing text with non-copied blank line",
-                        self.current_position()
-                    );
-                    writer.push_str(&format!("# {}\n", &line));
-                }
+                trace!(
+                    "PRINT {}: replacing text with non-copied blank line",
+                    self.current_position()
+                );
+                writer.push_str(&format!("# {}\n", &line));
             }
             self.line_no += 1;
             self.overall_line_no += 1;
