@@ -1,3 +1,5 @@
+// TODO Create macro for ProcessorError
+// TODO Reimplement definitions in the SleighProcessor
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -7,8 +9,10 @@ use log::trace;
 use regex::Regex;
 
 mod conditional_helper;
+pub mod errors;
 
 use conditional_helper::ConditionalHelper;
+use errors::{PreprocessorError, Result};
 
 type Definitions = HashMap<String, String>;
 
@@ -60,7 +64,7 @@ impl<'a> SleighPreprocessor<'a> {
         writer: &mut String,
         overall_line_no: u64,
         file_path: P,
-    ) -> std::io::Result<()>
+    ) -> Result<()>
     where
         P: Into<PathBuf>,
     {
@@ -75,16 +79,15 @@ impl<'a> SleighPreprocessor<'a> {
         Ok(())
     }
 
-    pub fn process(&'a mut self, writer: &mut String) -> Definitions {
-        // TODO Create error
-        self.process_internal(writer, 1).unwrap()
+    pub fn process(&'a mut self, writer: &mut String) -> Result<Definitions> {
+        self.process_internal(writer, 1)
     }
 
     fn process_internal(
         &'a mut self,
         writer: &mut String,
         overall_line_no: u64,
-    ) -> std::io::Result<Definitions> {
+    ) -> Result<Definitions> {
         self.line_no = 1;
         self.overall_line_no = overall_line_no;
         self.ifstack
@@ -112,14 +115,25 @@ impl<'a> SleighPreprocessor<'a> {
                 if let Some(m) = INCLUDE_RE.captures(&line) {
                     if self.is_copy() {
                         let mut include_file_path =
-                            PathBuf::from(self.handle_variables(m.get(1).unwrap().as_str(), true));
+                            PathBuf::from(self.handle_variables(m.get(1).unwrap().as_str(), true)?);
                         if include_file_path.is_relative() {
                             include_file_path = PathBuf::from(&self.file_path)
-                                .with_file_name(include_file_path.file_name().unwrap());
+                                .parent()
+                                .unwrap()
+                                .join(include_file_path);
                         }
                         if !include_file_path.exists() {
-                            // TODO Create errors
-                            panic!();
+                            return Err(PreprocessorError::new(
+                                format!(
+                                    "included file \"{}\" does not exist",
+                                    include_file_path.display()
+                                ),
+                                self.file_name(),
+                                self.line_no,
+                                self.overall_line_no,
+                                line,
+                            )
+                            .into());
                         }
                         self.include_file(writer, self.overall_line_no, include_file_path)?;
                         // increment the position now because we already replaced the include
@@ -134,7 +148,6 @@ impl<'a> SleighPreprocessor<'a> {
                     .or_else(|| DEFINE2_RE.captures(&line))
                 {
                     if self.is_copy() {
-                        // TODO Create error
                         let key = m.get(1).unwrap().as_str();
                         let value = m.get(2).unwrap().as_str();
                         self.define(key, value);
@@ -172,19 +185,25 @@ impl<'a> SleighPreprocessor<'a> {
                     trace!("@if... {}", m.get(1).unwrap().as_str());
                 // TODO Implement parser of Boolean expressions
                 } else if let Some(m) = ELIF_RE.captures(&line) {
-                    self.enter_elif();
+                    self.enter_elif(&line)?;
                     trace!("@elif... {}", m.get(1).unwrap().as_str());
                 // TODO Implement parser of Boolean expressions
                 } else if ENDIF_RE.is_match(&line) {
-                    self.leave_if();
+                    self.leave_if(&line)?;
                     trace!("@endif");
                 } else if ELSE_RE.is_match(&line) {
-                    self.enter_else();
+                    self.enter_else(line)?;
                     self.set_copy(!self.is_handled());
                     trace!("@else");
                 } else {
-                    // TODO Create error
-                    panic!();
+                    return Err(PreprocessorError::new(
+                        "unrecognized preprocessor directive",
+                        self.file_name(),
+                        self.line_no,
+                        self.overall_line_no,
+                        &line,
+                    )
+                    .into());
                 }
                 trace!(
                     "PRINT {}: commenting directive out",
@@ -193,7 +212,7 @@ impl<'a> SleighPreprocessor<'a> {
                 writer.push_str(&format!("# {}\n", original_line));
             } else if self.is_copy() {
                 trace!("PRINT {}: printing text", self.current_position());
-                writer.push_str(&self.handle_variables(&line, self.compatible));
+                writer.push_str(&self.handle_variables(&line, self.compatible)?);
                 writer.push('\n');
             } else {
                 trace!(
@@ -206,15 +225,17 @@ impl<'a> SleighPreprocessor<'a> {
             self.overall_line_no += 1;
         }
         if self.error_count > 0 {
-            // TODO Create errors
-            panic!();
+            return Err(PreprocessorError::new(
+                "Error during preprocessing",
+                self.file_name(),
+                self.overall_line_no,
+                0,
+                "",
+            )
+            .into());
         }
         trace!("leave SleighPreprocessor");
         Ok(self.definitions.take().unwrap())
-    }
-
-    fn is_copy(&self) -> bool {
-        self.ifstack.iter().all(|x| x.copy())
     }
 
     fn current_position(&self) -> String {
@@ -240,7 +261,7 @@ impl<'a> SleighPreprocessor<'a> {
             .unwrap_or("")
     }
 
-    fn handle_variables<S: Into<String>>(&self, input: S, is_compatible: bool) -> String {
+    fn handle_variables<S: Into<String>>(&self, input: S, is_compatible: bool) -> Result<String> {
         let mut input = input.into();
         let mut output = String::from(&input);
         while let Some(m) = EXPANSION_RE.captures(&input) {
@@ -252,8 +273,14 @@ impl<'a> SleighPreprocessor<'a> {
                 if let Some(definiton) = self.definitions.as_ref().unwrap().get(variable) {
                     definiton
                 } else {
-                    // TODO Create error
-                    panic!();
+                    return Err(PreprocessorError::new(
+                        format!("unknown variable: {}", variable),
+                        self.file_name(),
+                        self.line_no,
+                        self.overall_line_no,
+                        input,
+                    )
+                    .into());
                 };
             if is_compatible {
                 output = output.replacen(expansion, definiton, 1);
@@ -263,7 +290,7 @@ impl<'a> SleighPreprocessor<'a> {
             }
             input = input.replacen(expansion, "", 1);
         }
-        output
+        Ok(output)
     }
 
     fn define<S>(&mut self, key: S, value: S)
@@ -290,38 +317,74 @@ impl<'a> SleighPreprocessor<'a> {
             .push(ConditionalHelper::new(true, false, false, self.is_copy()));
     }
 
-    fn leave_if(&mut self) {
-        // TODO Create error
+    fn enter_elif<S: AsRef<str>>(&mut self, line: S) -> Result<()> {
         if !self.is_in_if() {
-            panic!();
+            return Err(PreprocessorError::new(
+                "elif outside of IF* directive",
+                self.file_name(),
+                self.line_no,
+                self.overall_line_no,
+                line.as_ref(),
+            )
+            .into());
+        }
+        if self.is_saw_else() {
+            return Err(PreprocessorError::new(
+                "already saw else directive",
+                self.file_name(),
+                self.line_no,
+                self.overall_line_no,
+                line.as_ref(),
+            )
+            .into());
+        }
+        Ok(())
+    }
+
+    fn leave_if<S: AsRef<str>>(&mut self, line: S) -> Result<()> {
+        if !self.is_in_if() {
+            return Err(PreprocessorError::new(
+                "not in IF* directive",
+                self.file_name(),
+                self.line_no,
+                self.overall_line_no,
+                line.as_ref(),
+            )
+            .into());
         }
         self.ifstack.pop();
+        Ok(())
     }
 
-    fn is_in_if(&self) -> bool {
-        // TODO Create error
-        self.ifstack.last().unwrap().in_if()
-    }
-
-    fn enter_elif(&mut self) {
-        // TODO Create error
+    fn enter_else<S: AsRef<str>>(&mut self, line: S) -> Result<()> {
         if !self.is_in_if() {
-            panic!();
+            return Err(PreprocessorError::new(
+                "else outside of IF* directive",
+                self.file_name(),
+                self.line_no,
+                self.overall_line_no,
+                line.as_ref(),
+            )
+            .into());
         }
         if self.is_saw_else() {
-            panic!();
-        }
-    }
-
-    fn enter_else(&mut self) {
-        // TODO Create error
-        if !self.is_in_if() {
-            panic!();
-        }
-        if self.is_saw_else() {
-            panic!();
+            return Err(PreprocessorError::new(
+                "duplicate else directive",
+                self.file_name(),
+                self.line_no,
+                self.overall_line_no,
+                line.as_ref(),
+            )
+            .into());
         }
         self.set_saw_else(true);
+        Ok(())
+    }
+
+    // Functions for checking/setting the ifstack. The ifstack always must be not empty.
+
+    fn is_in_if(&self) -> bool {
+        self.ifstack.last().unwrap().in_if()
     }
 
     fn set_saw_else(&mut self, is_saw_else: bool) {
@@ -329,12 +392,15 @@ impl<'a> SleighPreprocessor<'a> {
     }
 
     fn is_saw_else(&self) -> bool {
-        // TODO Create error
         self.ifstack.last().unwrap().saw_else()
     }
 
     fn set_copy(&mut self, is_copy: bool) {
         self.ifstack.last_mut().unwrap().set_copy(is_copy);
+    }
+
+    fn is_copy(&self) -> bool {
+        self.ifstack.iter().all(|x| x.copy())
     }
 
     fn set_handled(&mut self, is_handled: bool) {
