@@ -1,8 +1,9 @@
-use sleigh_preprocessor::SleighPreprocessor;
 use std::collections::HashMap;
 use std::env::args;
 use std::fs::File;
 use std::io::Write;
+
+use sleigh_preprocessor::SleighPreprocessor;
 
 fn main() {
     pretty_env_logger::init();

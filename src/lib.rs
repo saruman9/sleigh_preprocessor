@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use log::trace;
 use regex::Regex;
+use sleigh_parser::boolean_expression::parse_boolean_expression;
 
 mod conditional_helper;
 pub mod errors;
@@ -182,12 +183,14 @@ impl<'a> SleighPreprocessor<'a> {
                     }
                 } else if let Some(m) = IF_RE.captures(&line) {
                     self.enter_if();
-                    trace!("@if... {}", m.get(1).unwrap().as_str());
-                // TODO Implement parser of Boolean expressions
+                    let m = m.get(1).unwrap().as_str();
+                    trace!("@if... {}", m);
+                    self.handle_expression(m);
                 } else if let Some(m) = ELIF_RE.captures(&line) {
                     self.enter_elif(&line)?;
-                    trace!("@elif... {}", m.get(1).unwrap().as_str());
-                // TODO Implement parser of Boolean expressions
+                    let m = m.get(1).unwrap().as_str();
+                    trace!("@elif... {}", m);
+                    self.handle_expression(m);
                 } else if ENDIF_RE.is_match(&line) {
                     self.leave_if(&line)?;
                     trace!("@endif");
@@ -259,6 +262,26 @@ impl<'a> SleighPreprocessor<'a> {
             .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("")
+    }
+
+    fn handle_expression<S: AsRef<str>>(&mut self, expression: S) {
+        let expression = expression.as_ref();
+        if self.is_handled() {
+            self.set_copy(false);
+            trace!("already handled");
+        } else if !self.parse_expression(expression) {
+            self.set_copy(false);
+            trace!("expression \"{}\" is FALSE", expression);
+        } else {
+            self.set_copy(true);
+            self.set_handled(true);
+            trace!("expression \"{}\" is true", expression);
+        }
+    }
+
+    fn parse_expression<S: AsRef<str>>(&self, expression: S) -> bool {
+        let expression = expression.as_ref();
+        parse_boolean_expression(expression, &self.definitions.as_ref().unwrap()).unwrap()
     }
 
     fn handle_variables<S: Into<String>>(&self, input: S, is_compatible: bool) -> Result<String> {
