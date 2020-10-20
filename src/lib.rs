@@ -183,12 +183,12 @@ impl<'a> SleighPreprocessor<'a> {
                     self.enter_if();
                     let m = m.get(1).unwrap().as_str();
                     trace!("@if... {}", m);
-                    self.handle_expression(m);
+                    self.handle_expression(m)?;
                 } else if let Some(m) = ELIF_RE.captures(&line) {
                     self.enter_elif(&line)?;
                     let m = m.get(1).unwrap().as_str();
                     trace!("@elif... {}", m);
-                    self.handle_expression(m);
+                    self.handle_expression(m)?;
                 } else if ENDIF_RE.is_match(&line) {
                     self.leave_if(&line)?;
                     trace!("@endif");
@@ -262,12 +262,12 @@ impl<'a> SleighPreprocessor<'a> {
             .unwrap_or("")
     }
 
-    fn handle_expression<S: AsRef<str>>(&mut self, expression: S) {
+    fn handle_expression<S: AsRef<str>>(&mut self, expression: S) -> Result<()> {
         let expression = expression.as_ref();
         if self.is_handled() {
             self.set_copy(false);
             trace!("already handled");
-        } else if !self.parse_expression(expression) {
+        } else if !self.parse_expression(expression)? {
             self.set_copy(false);
             trace!("expression \"{}\" is FALSE", expression);
         } else {
@@ -275,11 +275,21 @@ impl<'a> SleighPreprocessor<'a> {
             self.set_handled(true);
             trace!("expression \"{}\" is true", expression);
         }
+        Ok(())
     }
 
-    fn parse_expression<S: AsRef<str>>(&self, expression: S) -> bool {
+    fn parse_expression<S: AsRef<str>>(&self, expression: S) -> Result<bool> {
         let expression = expression.as_ref();
-        parse_boolean_expression(expression, &self.definitions.as_ref().unwrap()).unwrap()
+        parse_boolean_expression(expression, &self.definitions.as_ref().unwrap()).map_err(|e| {
+            PreprocessorError::new(
+                format!("parser error: {}", e),
+                self.file_name(),
+                self.line_no,
+                self.overall_line_no,
+                expression.to_string(),
+            )
+            .into()
+        })
     }
 
     fn handle_variables<S: Into<String>>(&self, input: S, is_compatible: bool) -> Result<String> {
@@ -290,19 +300,20 @@ impl<'a> SleighPreprocessor<'a> {
             let expansion = m.get(0).unwrap().as_str();
             trace!("found expansion: {}", expansion);
             let variable = m.get(1).unwrap().as_str();
-            let definiton =
-                if let Some(definiton) = self.definitions.as_ref().unwrap().get(variable) {
-                    definiton
-                } else {
-                    return Err(PreprocessorError::new(
+            let definiton = self
+                .definitions
+                .as_ref()
+                .unwrap()
+                .get(variable)
+                .ok_or_else(|| {
+                    errors::Error::Preprocessor(PreprocessorError::new(
                         format!("unknown variable: {}", variable),
                         self.file_name(),
                         self.line_no,
                         self.overall_line_no,
-                        input,
-                    )
-                    .into());
-                };
+                        input.to_string(),
+                    ))
+                })?;
             if is_compatible {
                 output = output.replacen(expansion, definiton, 1);
             } else {
