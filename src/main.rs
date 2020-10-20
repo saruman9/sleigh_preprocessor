@@ -11,7 +11,13 @@ fn main() {
     let mut definitions = HashMap::new();
     let file_path = args().nth(1).unwrap();
     let mut sleigh_preprocessor = SleighPreprocessor::new(definitions, &file_path);
-    definitions = sleigh_preprocessor.process(&mut writer).unwrap();
+    definitions = match sleigh_preprocessor.process(&mut writer) {
+        Ok(def) => def,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
     let mut new_file =
         File::create(std::path::PathBuf::from(&file_path).with_extension("sla")).unwrap();
     println!("{:?}", definitions);
