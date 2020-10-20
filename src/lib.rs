@@ -210,7 +210,7 @@ impl<'a> SleighPreprocessor<'a> {
                     "PRINT {}: commenting directive out",
                     self.current_position()
                 );
-                writer.push_str(&format!("# {}\n", original_line));
+                writer.push_str(&format!("#{}\n", original_line));
             } else if self.is_copy() {
                 trace!("PRINT {}: printing text", self.current_position());
                 writer.push_str(&self.handle_variables(&line, self.compatible)?);
@@ -220,7 +220,7 @@ impl<'a> SleighPreprocessor<'a> {
                     "PRINT {}: replacing text with non-copied blank line",
                     self.current_position()
                 );
-                writer.push_str(&format!("# {}\n", &line));
+                writer.push_str(&format!("#{}\n", &line));
             }
             self.line_no += 1;
             self.overall_line_no += 1;
@@ -441,13 +441,5 @@ impl<'a> SleighPreprocessor<'a> {
 
     fn is_handled(&self) -> bool {
         self.ifstack.last().unwrap().handled()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
     }
 }
