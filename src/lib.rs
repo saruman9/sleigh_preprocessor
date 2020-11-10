@@ -294,10 +294,11 @@ impl<'a> SleighPreprocessor<'a> {
 
     fn handle_variables<S: Into<String>>(&self, input: S, is_compatible: bool) -> Result<String> {
         let mut input = input.into();
-        let mut output = String::from(&input);
+        let mut output = String::new();
         while let Some(m) = EXPANSION_RE.captures(&input) {
             trace!("current line '{}'", input);
-            let expansion = m.get(0).unwrap().as_str();
+            let expansion_match = m.get(0).unwrap();
+            let expansion = expansion_match.as_str();
             trace!("found expansion: {}", expansion);
             let variable = m.get(1).unwrap().as_str();
             let definiton = self
@@ -314,14 +315,16 @@ impl<'a> SleighPreprocessor<'a> {
                         input.to_string(),
                     ))
                 })?;
-            if is_compatible {
-                output = output.replacen(expansion, definiton, 1);
-            } else {
-                output =
-                    output.replacen(expansion, &format!("\x08{}\x08{}", expansion, definiton), 1);
+            output.push_str(input.get(0..expansion_match.start()).unwrap());
+            if !is_compatible {
+                output.push('\x08');
+                output.push_str(expansion);
+                output.push('\x08');
             }
-            input = input.replacen(expansion, "", 1);
+            output.push_str(definiton);
+            input = input.get(expansion_match.end()..).unwrap().to_string();
         }
+        output.push_str(&input);
         Ok(output)
     }
 
