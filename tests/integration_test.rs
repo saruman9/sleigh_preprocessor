@@ -76,3 +76,10 @@ fn z_complex() {
     let output = include_str!("../resources/z_complex.output");
     assert_eq!(output, writer);
 }
+
+#[test]
+fn regression_oneline_define() {
+    let writer = common("oneline_define");
+    let output = include_str!("../resources/oneline_define.output");
+    assert_eq!(output, writer);
+}
