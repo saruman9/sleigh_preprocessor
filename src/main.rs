@@ -8,18 +8,19 @@ use sleigh_preprocessor::SleighPreprocessor;
 fn main() {
     pretty_env_logger::init();
     let mut writer = String::new();
-    let mut definitions = HashMap::new();
+    let definitions = HashMap::new();
     let file_path = args().nth(1).unwrap();
-    let mut sleigh_preprocessor = SleighPreprocessor::new(definitions, &file_path);
-    definitions = match sleigh_preprocessor.process(&mut writer) {
-        Ok(def) => def,
+    let mut sleigh_preprocessor = SleighPreprocessor::new(definitions, &file_path, true);
+    let (definitions, locations) = match sleigh_preprocessor.process(&mut writer) {
+        Ok((def, loc)) => (def, loc),
         Err(e) => {
             eprintln!("{}", e);
             std::process::exit(1);
         }
     };
+    println!("{:#?}", definitions);
+    println!("{:#?}", locations);
     let mut new_file =
         File::create(std::path::PathBuf::from(&file_path).with_extension("sla")).unwrap();
-    println!("{:?}", definitions);
     new_file.write_all(&writer.into_bytes()).unwrap();
 }

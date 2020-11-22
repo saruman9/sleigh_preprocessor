@@ -9,7 +9,7 @@ fn common(input_name: &str) -> String {
     definitions.insert("REPLACE".into(), "includes".into());
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push(format!("resources/{}.input", input_name));
-    let mut sleigh_preprocessor = SleighPreprocessor::new(definitions, path);
+    let mut sleigh_preprocessor = SleighPreprocessor::new(definitions, path, false);
     sleigh_preprocessor.process(&mut writer).unwrap();
     writer
 }

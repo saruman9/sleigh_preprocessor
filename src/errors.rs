@@ -42,8 +42,8 @@ impl fmt::Display for Error {
 pub struct PreprocessorError {
     message: String,
     path: PathBuf,
-    line_no: u64,
-    overall_line_no: u64,
+    line_no: usize,
+    overall_line_no: usize,
     line: String,
 }
 
@@ -51,8 +51,8 @@ impl PreprocessorError {
     pub(crate) fn new<S, P>(
         message: S,
         path: P,
-        line_no: u64,
-        overall_line_no: u64,
+        line_no: usize,
+        overall_line_no: usize,
         line: S,
     ) -> Self
     where

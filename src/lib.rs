@@ -9,9 +9,11 @@ use sleigh_parser::boolean_expression::parse_boolean_expression;
 
 mod conditional_helper;
 pub mod errors;
+pub mod location;
 
 use conditional_helper::ConditionalHelper;
 use errors::{PreprocessorError, Result};
+use location::Location;
 
 type Definitions = HashMap<String, String>;
 
@@ -35,6 +37,7 @@ lazy_static::lazy_static! {
 #[derive(Debug, Default)]
 pub struct SleighPreprocessor<'a> {
     definitions: Option<Definitions>,
+    locations: Option<Vec<Location>>,
     compatible: bool,
 
     ifstack: Vec<ConditionalHelper>,
@@ -42,18 +45,20 @@ pub struct SleighPreprocessor<'a> {
 
     file_path: PathBuf,
     line: Option<&'a str>,
-    line_no: u64,
-    overall_line_no: u64,
+    line_no: usize,
+    overall_line_no: usize,
 }
 
 impl<'a> SleighPreprocessor<'a> {
-    pub fn new<P>(definitions: Definitions, file_path: P) -> Self
+    pub fn new<P>(definitions: Definitions, file_path: P, is_compatible: bool) -> Self
     where
         P: Into<PathBuf>,
     {
         SleighPreprocessor {
             definitions: Some(definitions),
+            locations: Some(Vec::new()),
             file_path: file_path.into(),
+            compatible: is_compatible,
             ..Default::default()
         }
     }
@@ -61,32 +66,36 @@ impl<'a> SleighPreprocessor<'a> {
     fn include_file<P>(
         &mut self,
         writer: &mut String,
-        overall_line_no: u64,
+        overall_line_no: usize,
         file_path: P,
     ) -> Result<()>
     where
         P: Into<PathBuf>,
     {
-        let definitions = self.definitions.take().unwrap();
+        let definitions = self.definitions.take();
+        let locations = self.locations.take();
         let mut preprocessor = SleighPreprocessor {
-            definitions: Some(definitions),
             compatible: self.compatible,
             file_path: file_path.into(),
+            definitions,
+            locations,
             ..Default::default()
         };
-        self.definitions = Some(preprocessor.process_internal(writer, overall_line_no)?);
+        let (definitions, locations) = preprocessor.process_internal(writer, overall_line_no)?;
+        self.definitions = Some(definitions);
+        self.locations = Some(locations);
         Ok(())
     }
 
-    pub fn process(&'a mut self, writer: &mut String) -> Result<Definitions> {
+    pub fn process(&'a mut self, writer: &mut String) -> Result<(Definitions, Vec<Location>)> {
         self.process_internal(writer, 1)
     }
 
     fn process_internal(
         &'a mut self,
         writer: &mut String,
-        overall_line_no: u64,
-    ) -> Result<Definitions> {
+        overall_line_no: usize,
+    ) -> Result<(Definitions, Vec<Location>)> {
         self.line_no = 1;
         self.overall_line_no = overall_line_no;
         self.ifstack
@@ -94,7 +103,7 @@ impl<'a> SleighPreprocessor<'a> {
 
         let file = File::open(&self.file_path)?;
         let reader = BufReader::new(file);
-        self.output_position(writer);
+        self.output_position(writer, writer.lines().count() + 1);
         trace!("enter SleighPreprocessor");
 
         for line in reader.lines() {
@@ -138,7 +147,7 @@ impl<'a> SleighPreprocessor<'a> {
                         // increment the position now because we already replaced the include
                         self.line_no += 1;
                         self.overall_line_no += 1;
-                        self.output_position(writer);
+                        self.output_position(writer, writer.lines().count() + 1);
                         // the one directive we skip printing a blank line
                         continue;
                     }
@@ -236,7 +245,10 @@ impl<'a> SleighPreprocessor<'a> {
             .into());
         }
         trace!("leave SleighPreprocessor");
-        Ok(self.definitions.take().unwrap())
+        Ok((
+            self.definitions.take().unwrap(),
+            self.locations.take().unwrap(),
+        ))
     }
 
     fn current_position(&self) -> String {
@@ -248,11 +260,17 @@ impl<'a> SleighPreprocessor<'a> {
         )
     }
 
-    fn output_position(&self, writer: &mut String) {
+    fn output_position(&mut self, writer: &mut String, all_line_count: usize) {
+        let file_name = self.file_name().to_string();
+        let line_no = self.line_no;
         if !self.compatible {
-            let position = format!("\x08{}###{}\x08", self.file_name(), self.line_no);
+            let position = format!("\x08{}###{}\x08", file_name, line_no);
             writer.push_str(&position);
         }
+        self.locations
+            .as_mut()
+            .unwrap()
+            .push(Location::new(file_name, line_no, all_line_count));
     }
 
     fn file_name(&self) -> &str {
