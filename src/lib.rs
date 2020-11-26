@@ -64,15 +64,27 @@ impl<'a> SleighPreprocessor<'a> {
         }
     }
 
-    fn include_file<P>(
+    pub fn process(&mut self, writer: &mut String) -> Result<()> {
+        let (definitions, locations) = self.process_internal(writer, 1)?;
+        self.definitions = Some(definitions);
+        self.locations = Some(locations);
+        Ok(())
+    }
+
+    pub fn definitions(&self) -> &Definitions {
+        self.definitions.as_ref().unwrap()
+    }
+
+    pub fn locations(&self) -> &[Location] {
+        self.locations.as_ref().map(|v| v.as_ref()).unwrap()
+    }
+
+    fn include_file(
         &mut self,
         writer: &mut String,
         overall_line_no: usize,
-        file_path: P,
-    ) -> Result<()>
-    where
-        P: Into<PathBuf>,
-    {
+        file_path: impl Into<PathBuf>,
+    ) -> Result<()> {
         let definitions = self.definitions.take();
         let locations = self.locations.take();
         let mut preprocessor = SleighPreprocessor {
@@ -88,12 +100,8 @@ impl<'a> SleighPreprocessor<'a> {
         Ok(())
     }
 
-    pub fn process(&'a mut self, writer: &mut String) -> Result<(Definitions, Vec<Location>)> {
-        self.process_internal(writer, 1)
-    }
-
     fn process_internal(
-        &'a mut self,
+        &mut self,
         writer: &mut String,
         overall_line_no: usize,
     ) -> Result<(Definitions, Vec<Location>)> {
