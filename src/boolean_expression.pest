@@ -1,0 +1,31 @@
+boolean_expression = _{ SOI ~ expr ~ EOI }
+  expr = { boolean_clause ~ (bool_op ~ boolean_clause)* }
+    bool_op = _{ OR_OP | XOR_OP | AND_OP }
+    boolean_clause = {
+      expr_not
+    | expr_paren
+    | expr_eq
+    | expr_defined
+    }
+      expr_not = { "!" ~ expr_paren }
+      expr_paren = { "(" ~ expr ~ ")" }
+      expr_eq = { expr_term ~ comp_op ~ expr_term }
+        comp_op = { "!=" | "==" }
+        expr_term = { IDENTIFIER | QSTRING }
+      expr_defined = { "defined" ~ "(" ~ IDENTIFIER ~ ")" }
+
+IDENTIFIER = { (ASCII_ALPHANUMERIC | "_" )+ }
+QSTRING = _{ "\"" ~ STRING ~ "\"" }
+STRING = @{ (ESCAPE | !("\\" | "\"") ~ ANY)* }
+ESCAPE = {
+      "\\" ~ ("b" | "t" | "n" | "f" | "r" | "\"" | "'" | "\\")
+    | UNICODE_ESCAPE
+    | OCTAL_ESCAPE
+    }
+UNICODE_ESCAPE = { "\\" ~ "u" ~ ASCII_HEX_DIGIT{4} }
+OCTAL_ESCAPE = { "\\" ~ ('0'..'3')? ~ ASCII_OCT_DIGIT{1,2} }
+OR_OP = { "||" }
+XOR_OP = { "^^" }
+AND_OP = { "&&" }
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }

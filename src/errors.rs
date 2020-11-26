@@ -6,6 +6,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     Io(io::Error),
     Preprocessor(PreprocessorError),
+    Parsing(String),
+    NotDefined(String),
 }
 
 impl From<io::Error> for Error {
@@ -22,23 +24,47 @@ impl From<PreprocessorError> for Error {
 
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match *self {
+        match self {
             Error::Io(ref e) => Some(e),
             Error::Preprocessor(ref e) => Some(e),
+            Self::Parsing(_) => None,
+            Self::NotDefined(_) => None,
         }
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             Error::Io(ref e) => write!(f, "IO error: {}", e),
             Error::Preprocessor(ref e) => write!(f, "Preprocessor error: {}", e),
+            Self::Parsing(msg) => write!(f, "Parsing error: {}", msg),
+            Self::NotDefined(identifier) => write!(f, "Identifier \"{}\" not defined", identifier),
         }
     }
 }
 
-#[derive(Debug)]
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Self::Io(_) => matches!(other, Self::Io(_)),
+            Self::Preprocessor(l) => match other {
+                Self::Preprocessor(r) => l == r,
+                _ => false,
+            },
+            Self::Parsing(l) => match other {
+                Self::Parsing(r) => l == r,
+                _ => false,
+            },
+            Self::NotDefined(l) => match other {
+                Self::NotDefined(r) => l == r,
+                _ => false,
+            },
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct PreprocessorError {
     message: String,
     path: PathBuf,

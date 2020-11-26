@@ -5,12 +5,13 @@ use std::path::PathBuf;
 
 use log::trace;
 use regex::Regex;
-use sleigh_parser::boolean_expression::parse_boolean_expression;
 
+pub mod boolean_expression;
 mod conditional_helper;
 pub mod errors;
 pub mod location;
 
+use boolean_expression::parse_boolean_expression;
 use conditional_helper::ConditionalHelper;
 use errors::{PreprocessorError, Result};
 use location::Location;
