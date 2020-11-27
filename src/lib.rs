@@ -16,7 +16,7 @@ use conditional_helper::ConditionalHelper;
 use errors::{PreprocessorError, Result};
 use location::Location;
 
-type Definitions = HashMap<String, String>;
+pub type Definitions = HashMap<String, String>;
 
 lazy_static::lazy_static! {
     static ref EXPANSION_RE: Regex = Regex::new(r"\$\(([0-9A-Z_a-z]+)\)").unwrap();
@@ -77,6 +77,14 @@ impl<'a> SleighPreprocessor<'a> {
 
     pub fn locations(&self) -> &[Location] {
         self.locations.as_ref().map(|v| v.as_ref()).unwrap()
+    }
+
+    pub fn take_definitions(&mut self) -> Definitions {
+        self.definitions.take().unwrap()
+    }
+
+    pub fn take_locations(&mut self) -> Vec<Location> {
+        self.locations.take().unwrap()
     }
 
     fn include_file(
