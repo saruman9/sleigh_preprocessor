@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Default, Debug)]
 pub struct Location {
@@ -14,5 +14,17 @@ impl Location {
             local_line_num,
             global_line_num,
         }
+    }
+
+    pub fn global_line_num(&self) -> usize {
+        self.global_line_num
+    }
+
+    pub fn local_line_num(&self) -> usize {
+        self.local_line_num
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.file
     }
 }
