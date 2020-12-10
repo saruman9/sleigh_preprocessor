@@ -287,7 +287,7 @@ impl<'a> SleighPreprocessor<'a> {
         self.locations
             .as_mut()
             .unwrap()
-            .push(Location::new(file_name, line_no, all_line_count));
+            .push(Location::new(&self.file_path, line_no, all_line_count));
     }
 
     fn file_name(&self) -> &str {

@@ -2,15 +2,19 @@ use std::path::{Path, PathBuf};
 
 #[derive(Default, Debug)]
 pub struct Location {
-    file: PathBuf,
+    filepath: PathBuf,
     local_line_num: usize,
     global_line_num: usize,
 }
 
 impl Location {
-    pub fn new(file: impl Into<PathBuf>, local_line_num: usize, global_line_num: usize) -> Self {
+    pub fn new(
+        filepath: impl Into<PathBuf>,
+        local_line_num: usize,
+        global_line_num: usize,
+    ) -> Self {
         Self {
-            file: file.into(),
+            filepath: filepath.into(),
             local_line_num,
             global_line_num,
         }
@@ -24,7 +28,7 @@ impl Location {
         self.local_line_num
     }
 
-    pub fn path(&self) -> &Path {
-        &self.file
+    pub fn filepath(&self) -> &Path {
+        &self.filepath
     }
 }
